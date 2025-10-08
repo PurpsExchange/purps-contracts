@@ -1,0 +1,16 @@
+{
+  "name": "hardhat-project",
+  "scripts": {
+    "deploy": "rm -rf ./ignition/deployments && hardhat ignition deploy ./ignition/modules/V2Periphery.ts",
+    "verify": "hardhat verify 0x4DA2eB9D45B677Aea588c39a29d8fF16576339a1"
+  },
+  "dependencies": {
+    "@uniswap/lib": "4.0.1-alpha",
+    "@uniswap/v2-core": "1.0.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^0.15.10",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.19"
+  }
+}
