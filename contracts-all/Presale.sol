@@ -58,6 +58,11 @@ contract Presale {
     mapping(address => uint256) public contribution;
 
     /**
+     * @notice Weather users have claimed their tokens.
+     */
+    mapping(address => bool) public hasClaimed;
+
+    /**
      * @notice Emits when tokens are bought.
      * @param contributor The address of the contributor.
      * @param amount The amount of eth contributed.
@@ -115,21 +120,27 @@ contract Presale {
      * refund otherwise.
      */
     function claim() external {
-        require(isClaimingEnabled || isRefundEnabled, "Claiming is not enabled");
+        require(
+            isClaimingEnabled || isRefundEnabled,
+            "Claiming is not enabled"
+        );
         address buyer = msg.sender;
 
         // Check if the buyer has bought tokens
         uint256 buyerContribution = contribution[buyer];
         require(buyerContribution > 0, "No contribution");
 
-        // Reset the amount bought
-        delete contribution[buyer];
-
         if (isRefundEnabled) {
+            // Reset the contribution
+            delete contribution[buyer];
+
             // Refund the buyer
             payable(buyer).transfer(buyerContribution);
         } else {
-            uint256 tokensBought = buyerContribution / price;
+            require(hasClaimed[buyer] == false, "Tokens already claimed");
+            hasClaimed[buyer] = true;
+
+            uint256 tokensBought = buyerContribution * price;
 
             // Send the tokens
             saleToken.transfer(buyer, tokensBought);
@@ -151,17 +162,20 @@ contract Presale {
         require(_hardCap > 0, "Hard cap must be greater than 0");
         require(_minBuy > 0, "Min buy must be greater than 0");
         require(_maxBuy > _minBuy, "Max buy must be greater than min buy");
-        require(_totalSaleAmount > 0, "Total sale amount must be greater than 0");
+        require(
+            _totalSaleAmount > 0,
+            "Total sale amount must be greater than 0"
+        );
         require(_end > _start, "End date must be after start date");
-        
+
         hardCap = _hardCap;
         minBuy = _minBuy;
         maxBuy = _maxBuy;
         totalSaleAmount = _totalSaleAmount;
         start = _start;
         end = _end;
-        
-        price = (hardCap * 1e18) / totalSaleAmount;
+
+        price = totalSaleAmount / hardCap;
     }
 
     function setTokenAddress(address newfTokenAddress) external onlyOwner {
@@ -191,6 +205,7 @@ contract Presale {
         require(success, "Transfer failed");
     }
 
+    // Useful to rescue stuck tokens
     function withdrawToken(address _token, uint256 _amount) external onlyOwner {
         IERC20(_token).transfer(owner, _amount);
     }

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
-// Wrapper for the Router02 which adds an interface fee to swaps.
+// Wrapper for IRouter02 to add interface fees and referrals
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IRouter02 {
     function swapExactETHForTokens(
@@ -65,21 +64,69 @@ interface IERC20 {
     function approve(address spender, uint amount) external returns (bool);
 }
 
-error NotAuthorized();
-
-contract PurpsRouter03 {
+contract PurpsRouter04 {
     using Address for address payable;
 
+    struct RewardInfo {
+        uint256 totalReward;
+        uint256 availableReward;
+    }
+
+    event ReferralFeeClaimed(
+        address indexed referrer,
+        address indexed token,
+        uint amount
+    );
+
+    error NotAuthorized();
+    error InvalidReferrer();
+
     uint public constant DENOMINATOR = 10_000;
+    address public constant WETH = 0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701;
     uint public fee;
+    uint public referralFee; // bps of regular fee
     address public feeRecipient;
+
+    mapping(address => address) public referrerOf;
+    mapping(address => uint) public referralsCountOf;
+    mapping(address => address[]) public rewardTokensOf; // referrer => tokens array
+    mapping(address => mapping(address => RewardInfo)) public referralRewardsOf; // referrer => token => rewards
+    mapping(address => mapping(address => bool)) private hasRewardToken; // referrer => token => exists
 
     IRouter02 constant SWAP_ROUTER =
         IRouter02(0xc80585f78A6e44fb46e1445006f820448840386e);
 
-    constructor(uint _fee, address _feeRecipient) {
+    constructor(uint _fee, uint _referralFee, address _feeRecipient) {
         fee = _fee;
+        referralFee = _referralFee;
         feeRecipient = _feeRecipient;
+    }
+
+    // Internal utility functions
+
+    /**
+     * @dev Processes referral fee and updates referrer rewards
+     * @param feeAmount The total fee amount to process
+     * @param token The token address for the reward (use WETH for ETH)
+     * @return remainingFee The fee amount after deducting referral portion
+     */
+    function _processReferralFee(
+        uint feeAmount,
+        address token
+    ) internal returns (uint remainingFee) {
+        address referrer = referrerOf[tx.origin]; // use tx.origin to support other wrappers and ensure correct referrer
+        if (referrer != address(0)) {
+            uint referralFeeAmount = (feeAmount * referralFee) / DENOMINATOR;
+            if (!hasRewardToken[referrer][token]) {
+                rewardTokensOf[referrer].push(token);
+                hasRewardToken[referrer][token] = true;
+            }
+            referralRewardsOf[referrer][token].totalReward += referralFeeAmount;
+            referralRewardsOf[referrer][token]
+                .availableReward += referralFeeAmount;
+            return feeAmount - referralFeeAmount;
+        }
+        return feeAmount;
     }
 
     // Swap functions
@@ -90,11 +137,12 @@ contract PurpsRouter03 {
         address to,
         uint deadline
     ) external payable returns (uint[] memory amounts) {
-        // Handle fee
+        // Handle fee on the amountIn
         uint amountIn = msg.value;
         uint feeAmount = (amountIn * fee) / DENOMINATOR;
-        payable(feeRecipient).sendValue(feeAmount);
         amountIn -= feeAmount;
+        feeAmount = _processReferralFee(feeAmount, WETH);
+        payable(feeRecipient).sendValue(feeAmount);
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactETHForTokens{value: amountIn}(
@@ -113,13 +161,15 @@ contract PurpsRouter03 {
         uint deadline
     ) external returns (uint[] memory amounts) {
         // Transfer to this and approve router to spend tokens
-        IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
-        IERC20(path[0]).approve(address(SWAP_ROUTER), amountIn);
+        IERC20 inputToken = IERC20(path[0]);
+        inputToken.transferFrom(msg.sender, address(this), amountIn);
+        inputToken.approve(address(SWAP_ROUTER), amountIn);
 
-        // Handle fee
+        // Handle fee on the amountIn
         uint feeAmount = (amountIn * fee) / DENOMINATOR;
-        IERC20(path[0]).transfer(feeRecipient, feeAmount);
         amountIn -= feeAmount;
+        feeAmount = _processReferralFee(feeAmount, path[0]);
+        inputToken.transfer(feeRecipient, feeAmount);
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactTokensForETH(
@@ -147,8 +197,9 @@ contract PurpsRouter03 {
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
         uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
-        payable(feeRecipient).sendValue(feeAmount);
         amounts[0] += feeAmount;
+        feeAmount = _processReferralFee(feeAmount, WETH);
+        payable(feeRecipient).sendValue(feeAmount);
 
         // Refund remaining ETH if any
         if (msg.value > amounts[0]) {
@@ -164,13 +215,15 @@ contract PurpsRouter03 {
         uint deadline
     ) external returns (uint[] memory amounts) {
         // Transfer to this and approve router to spend tokens
-        IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn);
-        IERC20(path[0]).approve(address(SWAP_ROUTER), amountIn);
+        IERC20 inputToken = IERC20(path[0]);
+        inputToken.transferFrom(msg.sender, address(this), amountIn);
+        inputToken.approve(address(SWAP_ROUTER), amountIn);
 
-        // Handle fee
+        // Handle fee on the amountIn
         uint feeAmount = (amountIn * fee) / DENOMINATOR;
-        IERC20(path[0]).transfer(feeRecipient, feeAmount);
         amountIn -= feeAmount;
+        feeAmount = _processReferralFee(feeAmount, path[0]);
+        inputToken.transfer(feeRecipient, feeAmount);
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactTokensForTokens(
@@ -190,8 +243,9 @@ contract PurpsRouter03 {
         uint deadline
     ) external returns (uint[] memory amounts) {
         // Transfer to this and approve router to spend tokens
-        IERC20(path[0]).transferFrom(msg.sender, address(this), amountInMax);
-        IERC20(path[0]).approve(address(SWAP_ROUTER), amountInMax);
+        IERC20 inputToken = IERC20(path[0]);
+        inputToken.transferFrom(msg.sender, address(this), amountInMax);
+        inputToken.approve(address(SWAP_ROUTER), amountInMax);
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapTokensForExactETH(
@@ -204,13 +258,14 @@ contract PurpsRouter03 {
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
         uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
-        IERC20(path[0]).transfer(feeRecipient, feeAmount);
         amounts[0] += feeAmount;
+        feeAmount = _processReferralFee(feeAmount, path[0]);
+        inputToken.transfer(feeRecipient, feeAmount);
 
         // Refund any unused tokens to user
         uint unusedAmount = amountInMax - amounts[0];
         if (unusedAmount > 0) {
-            IERC20(path[0]).transfer(msg.sender, unusedAmount);
+            inputToken.transfer(msg.sender, unusedAmount);
         }
     }
 
@@ -222,8 +277,9 @@ contract PurpsRouter03 {
         uint deadline
     ) external returns (uint[] memory amounts) {
         // Transfer to this and approve router to spend tokens
-        IERC20(path[0]).transferFrom(msg.sender, address(this), amountInMax);
-        IERC20(path[0]).approve(address(SWAP_ROUTER), amountInMax);
+        IERC20 inputToken = IERC20(path[0]);
+        inputToken.transferFrom(msg.sender, address(this), amountInMax);
+        inputToken.approve(address(SWAP_ROUTER), amountInMax);
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapTokensForExactTokens(
@@ -236,13 +292,85 @@ contract PurpsRouter03 {
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
         uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
-        IERC20(path[0]).transfer(feeRecipient, feeAmount);
         amounts[0] += feeAmount;
+        feeAmount = _processReferralFee(feeAmount, path[0]);
+        inputToken.transfer(feeRecipient, feeAmount);
 
         // Refund any unused tokens to user
         uint unusedAmount = amountInMax - amounts[0];
         if (unusedAmount > 0) {
-            IERC20(path[0]).transfer(msg.sender, unusedAmount);
+            inputToken.transfer(msg.sender, unusedAmount);
+        }
+    }
+
+    // Referral functions
+
+    function setReferrer(address referrer) external {
+        if (referrer == address(0)) revert InvalidReferrer();
+        if (referrerOf[msg.sender] != address(0)) revert InvalidReferrer();
+        referrerOf[msg.sender] = referrer;
+        referralsCountOf[referrer]++;
+    }
+
+    function claimAllRewards() external {
+        address[] storage tokens = rewardTokensOf[msg.sender];
+        uint256 length = tokens.length;
+
+        for (uint256 i = 0; i < length; i++) {
+            address token = tokens[i];
+            uint256 amount = referralRewardsOf[msg.sender][token]
+                .availableReward;
+
+            if (amount > 0) {
+                referralRewardsOf[msg.sender][token].availableReward = 0;
+
+                if (token == WETH) {
+                    payable(msg.sender).sendValue(amount);
+                } else {
+                    IERC20(token).transfer(msg.sender, amount);
+                }
+
+                emit ReferralFeeClaimed(msg.sender, token, amount);
+            }
+        }
+    }
+
+    function claimReward(address token) external {
+        uint256 amount = referralRewardsOf[msg.sender][token].availableReward;
+        if (amount > 0) {
+            referralRewardsOf[msg.sender][token].availableReward = 0;
+            if (token == WETH) {
+                payable(msg.sender).sendValue(amount);
+            } else {
+                IERC20(token).transfer(msg.sender, amount);
+            }
+        }
+
+        emit ReferralFeeClaimed(msg.sender, token, amount);
+    }
+
+    function getReferralRewards(
+        address referrer
+    )
+        external
+        view
+        returns (
+            address[] memory tokens,
+            uint256[] memory totalRewards,
+            uint256[] memory availableRewards
+        )
+    {
+        tokens = rewardTokensOf[referrer];
+        uint256 length = tokens.length;
+
+        totalRewards = new uint256[](length);
+        availableRewards = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            totalRewards[i] = referralRewardsOf[referrer][tokens[i]]
+                .totalReward;
+            availableRewards[i] = referralRewardsOf[referrer][tokens[i]]
+                .availableReward;
         }
     }
 
@@ -256,6 +384,11 @@ contract PurpsRouter03 {
     function setFee(uint _fee) external {
         if (msg.sender != feeRecipient) revert NotAuthorized();
         fee = _fee;
+    }
+
+    function setReferralFee(uint _referralFee) external {
+        if (msg.sender != feeRecipient) revert NotAuthorized();
+        referralFee = _referralFee;
     }
 
     receive() external payable {}
