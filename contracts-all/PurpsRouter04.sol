@@ -138,15 +138,19 @@ contract PurpsRouter04 {
         uint deadline
     ) external payable returns (uint[] memory amounts) {
         // Handle fee on the amountIn
-        uint amountIn = msg.value;
+        uint originalAmountIn = msg.value;
+        uint amountIn = originalAmountIn;
         uint feeAmount = (amountIn * fee) / DENOMINATOR;
         amountIn -= feeAmount;
         feeAmount = _processReferralFee(feeAmount, WETH);
         payable(feeRecipient).sendValue(feeAmount);
 
+        // Adjust amountOutMin proportionally to account for reduced input
+        uint adjustedAmountOutMin = (amountOutMin * amountIn) / originalAmountIn;
+
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactETHForTokens{value: amountIn}(
-            amountOutMin,
+            adjustedAmountOutMin,
             path,
             to,
             deadline
@@ -166,15 +170,19 @@ contract PurpsRouter04 {
         inputToken.approve(address(SWAP_ROUTER), amountIn);
 
         // Handle fee on the amountIn
+        uint originalAmountIn = amountIn;
         uint feeAmount = (amountIn * fee) / DENOMINATOR;
         amountIn -= feeAmount;
         feeAmount = _processReferralFee(feeAmount, path[0]);
         inputToken.transfer(feeRecipient, feeAmount);
 
+        // Adjust amountOutMin proportionally to account for reduced input
+        uint adjustedAmountOutMin = (amountOutMin * amountIn) / originalAmountIn;
+
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactTokensForETH(
             amountIn,
-            amountOutMin,
+            adjustedAmountOutMin,
             path,
             to,
             deadline
@@ -197,13 +205,13 @@ contract PurpsRouter04 {
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
         uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
-        amounts[0] += feeAmount;
         feeAmount = _processReferralFee(feeAmount, WETH);
         payable(feeRecipient).sendValue(feeAmount);
 
         // Refund remaining ETH if any
-        if (msg.value > amounts[0]) {
-            payable(msg.sender).sendValue(msg.value - amounts[0]);
+        uint unusedAmount = msg.value - amounts[0] - feeAmount;
+        if (unusedAmount > 0) {
+            payable(msg.sender).sendValue(unusedAmount);
         }
     }
 
@@ -220,15 +228,19 @@ contract PurpsRouter04 {
         inputToken.approve(address(SWAP_ROUTER), amountIn);
 
         // Handle fee on the amountIn
+        uint originalAmountIn = amountIn;
         uint feeAmount = (amountIn * fee) / DENOMINATOR;
         amountIn -= feeAmount;
         feeAmount = _processReferralFee(feeAmount, path[0]);
         inputToken.transfer(feeRecipient, feeAmount);
 
+        // Adjust amountOutMin proportionally to account for reduced input
+        uint adjustedAmountOutMin = (amountOutMin * amountIn) / originalAmountIn;
+
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactTokensForTokens(
             amountIn,
-            amountOutMin,
+            adjustedAmountOutMin,
             path,
             to,
             deadline
@@ -258,12 +270,11 @@ contract PurpsRouter04 {
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
         uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
-        amounts[0] += feeAmount;
         feeAmount = _processReferralFee(feeAmount, path[0]);
         inputToken.transfer(feeRecipient, feeAmount);
 
         // Refund any unused tokens to user
-        uint unusedAmount = amountInMax - amounts[0];
+        uint unusedAmount = amountInMax - amounts[0] - feeAmount;
         if (unusedAmount > 0) {
             inputToken.transfer(msg.sender, unusedAmount);
         }
@@ -292,12 +303,11 @@ contract PurpsRouter04 {
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
         uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
-        amounts[0] += feeAmount;
         feeAmount = _processReferralFee(feeAmount, path[0]);
         inputToken.transfer(feeRecipient, feeAmount);
 
         // Refund any unused tokens to user
-        uint unusedAmount = amountInMax - amounts[0];
+        uint unusedAmount = amountInMax - amounts[0] - feeAmount;
         if (unusedAmount > 0) {
             inputToken.transfer(msg.sender, unusedAmount);
         }
