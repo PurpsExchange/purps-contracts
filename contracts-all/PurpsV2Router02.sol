@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
-//    __  ___             __    
-//   /  |/  /__  ___  ___/ /__ _
-//  / /|_/ / _ \/ _ \/ _  / _ `/
-// /_/  /_/\___/_//_/\_,_/\_,_/                            
-//
+//      ____
+//     / __ \__  ___________  _____
+//    / /_/ / / / / ___/ __ \/ ___/
+//   / ____/ /_/ / /  / /_/ (__  )
+//  /_/    \__,_/_/  / .___/____/
+//                  /_/
 
 pragma solidity =0.6.6;
 
-interface IMondaV2Factory {
+interface IPurpsV2Factory {
     event PairCreated(
         address indexed token0,
         address indexed token1,
@@ -34,7 +35,7 @@ interface IMondaV2Factory {
     function setFeeToSetter(address) external;
 }
 
-interface IMondaV2Pair {
+interface IPurpsV2Pair {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
 
@@ -113,7 +114,7 @@ interface IMondaV2Pair {
     function initialize(address, address) external;
 }
 
-interface IMondaV2Router01 {
+interface IPurpsV2Router01 {
     function factory() external pure returns (address);
     function WETH() external pure returns (address);
 
@@ -246,7 +247,7 @@ interface IMondaV2Router01 {
     ) external view returns (uint[] memory amounts);
 }
 
-interface IMondaV2Router02 is IMondaV2Router01 {
+interface IPurpsV2Router02 is IPurpsV2Router01 {
     function removeLiquidityETHSupportingFeeOnTransferTokens(
         address token,
         uint liquidity,
@@ -319,14 +320,14 @@ interface IWETH {
     function withdraw(uint) external;
 }
 
-contract MondaV2Router02 is IMondaV2Router02 {
+contract PurpsV2Router02 is IPurpsV2Router02 {
     using SafeMath for uint;
 
     address public immutable override factory;
     address public immutable override WETH;
 
     modifier ensure(uint deadline) {
-        require(deadline >= block.timestamp, "MondaV2Router: EXPIRED");
+        require(deadline >= block.timestamp, "PurpsV2Router: EXPIRED");
         _;
     }
 
@@ -349,10 +350,10 @@ contract MondaV2Router02 is IMondaV2Router02 {
         uint amountBMin
     ) internal virtual returns (uint amountA, uint amountB) {
         // create the pair if it doesn't exist yet
-        if (IMondaV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
-            IMondaV2Factory(factory).createPair(tokenA, tokenB);
+        if (IPurpsV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
+            IPurpsV2Factory(factory).createPair(tokenA, tokenB);
         }
-        (uint reserveA, uint reserveB) = MondaV2Library.getReserves(
+        (uint reserveA, uint reserveB) = PurpsV2Library.getReserves(
             factory,
             tokenA,
             tokenB
@@ -360,7 +361,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
         if (reserveA == 0 && reserveB == 0) {
             (amountA, amountB) = (amountADesired, amountBDesired);
         } else {
-            uint amountBOptimal = MondaV2Library.quote(
+            uint amountBOptimal = PurpsV2Library.quote(
                 amountADesired,
                 reserveA,
                 reserveB
@@ -368,11 +369,11 @@ contract MondaV2Router02 is IMondaV2Router02 {
             if (amountBOptimal <= amountBDesired) {
                 require(
                     amountBOptimal >= amountBMin,
-                    "MondaV2Router: INSUFFICIENT_B_AMOUNT"
+                    "PurpsV2Router: INSUFFICIENT_B_AMOUNT"
                 );
                 (amountA, amountB) = (amountADesired, amountBOptimal);
             } else {
-                uint amountAOptimal = MondaV2Library.quote(
+                uint amountAOptimal = PurpsV2Library.quote(
                     amountBDesired,
                     reserveB,
                     reserveA
@@ -380,7 +381,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
                 assert(amountAOptimal <= amountADesired);
                 require(
                     amountAOptimal >= amountAMin,
-                    "MondaV2Router: INSUFFICIENT_A_AMOUNT"
+                    "PurpsV2Router: INSUFFICIENT_A_AMOUNT"
                 );
                 (amountA, amountB) = (amountAOptimal, amountBDesired);
             }
@@ -410,10 +411,10 @@ contract MondaV2Router02 is IMondaV2Router02 {
             amountAMin,
             amountBMin
         );
-        address pair = MondaV2Library.pairFor(factory, tokenA, tokenB);
+        address pair = PurpsV2Library.pairFor(factory, tokenA, tokenB);
         TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);
         TransferHelper.safeTransferFrom(tokenB, msg.sender, pair, amountB);
-        liquidity = IMondaV2Pair(pair).mint(to);
+        liquidity = IPurpsV2Pair(pair).mint(to);
     }
     function addLiquidityETH(
         address token,
@@ -438,11 +439,11 @@ contract MondaV2Router02 is IMondaV2Router02 {
             amountTokenMin,
             amountETHMin
         );
-        address pair = MondaV2Library.pairFor(factory, token, WETH);
+        address pair = PurpsV2Library.pairFor(factory, token, WETH);
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
         IWETH(WETH).deposit{value: amountETH}();
         assert(IWETH(WETH).transfer(pair, amountETH));
-        liquidity = IMondaV2Pair(pair).mint(to);
+        liquidity = IPurpsV2Pair(pair).mint(to);
         // refund dust eth, if any
         if (msg.value > amountETH)
             TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
@@ -464,15 +465,15 @@ contract MondaV2Router02 is IMondaV2Router02 {
         ensure(deadline)
         returns (uint amountA, uint amountB)
     {
-        address pair = MondaV2Library.pairFor(factory, tokenA, tokenB);
-        IMondaV2Pair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
-        (uint amount0, uint amount1) = IMondaV2Pair(pair).burn(to);
-        (address token0, ) = MondaV2Library.sortTokens(tokenA, tokenB);
+        address pair = PurpsV2Library.pairFor(factory, tokenA, tokenB);
+        IPurpsV2Pair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
+        (uint amount0, uint amount1) = IPurpsV2Pair(pair).burn(to);
+        (address token0, ) = PurpsV2Library.sortTokens(tokenA, tokenB);
         (amountA, amountB) = tokenA == token0
             ? (amount0, amount1)
             : (amount1, amount0);
-        require(amountA >= amountAMin, "MondaV2Router: INSUFFICIENT_A_AMOUNT");
-        require(amountB >= amountBMin, "MondaV2Router: INSUFFICIENT_B_AMOUNT");
+        require(amountA >= amountAMin, "PurpsV2Router: INSUFFICIENT_A_AMOUNT");
+        require(amountB >= amountBMin, "PurpsV2Router: INSUFFICIENT_B_AMOUNT");
     }
     function removeLiquidityETH(
         address token,
@@ -514,9 +515,9 @@ contract MondaV2Router02 is IMondaV2Router02 {
         bytes32 r,
         bytes32 s
     ) external virtual override returns (uint amountA, uint amountB) {
-        address pair = MondaV2Library.pairFor(factory, tokenA, tokenB);
+        address pair = PurpsV2Library.pairFor(factory, tokenA, tokenB);
         uint value = approveMax ? uint(-1) : liquidity;
-        IMondaV2Pair(pair).permit(
+        IPurpsV2Pair(pair).permit(
             msg.sender,
             address(this),
             value,
@@ -547,9 +548,9 @@ contract MondaV2Router02 is IMondaV2Router02 {
         bytes32 r,
         bytes32 s
     ) external virtual override returns (uint amountToken, uint amountETH) {
-        address pair = MondaV2Library.pairFor(factory, token, WETH);
+        address pair = PurpsV2Library.pairFor(factory, token, WETH);
         uint value = approveMax ? uint(-1) : liquidity;
-        IMondaV2Pair(pair).permit(
+        IPurpsV2Pair(pair).permit(
             msg.sender,
             address(this),
             value,
@@ -606,9 +607,9 @@ contract MondaV2Router02 is IMondaV2Router02 {
         bytes32 r,
         bytes32 s
     ) external virtual override returns (uint amountETH) {
-        address pair = MondaV2Library.pairFor(factory, token, WETH);
+        address pair = PurpsV2Library.pairFor(factory, token, WETH);
         uint value = approveMax ? uint(-1) : liquidity;
-        IMondaV2Pair(pair).permit(
+        IPurpsV2Pair(pair).permit(
             msg.sender,
             address(this),
             value,
@@ -636,15 +637,15 @@ contract MondaV2Router02 is IMondaV2Router02 {
     ) internal virtual {
         for (uint i; i < path.length - 1; i++) {
             (address input, address output) = (path[i], path[i + 1]);
-            (address token0, ) = MondaV2Library.sortTokens(input, output);
+            (address token0, ) = PurpsV2Library.sortTokens(input, output);
             uint amountOut = amounts[i + 1];
             (uint amount0Out, uint amount1Out) = input == token0
                 ? (uint(0), amountOut)
                 : (amountOut, uint(0));
             address to = i < path.length - 2
-                ? MondaV2Library.pairFor(factory, output, path[i + 2])
+                ? PurpsV2Library.pairFor(factory, output, path[i + 2])
                 : _to;
-            IMondaV2Pair(MondaV2Library.pairFor(factory, input, output)).swap(
+            IPurpsV2Pair(PurpsV2Library.pairFor(factory, input, output)).swap(
                 amount0Out,
                 amount1Out,
                 to,
@@ -665,15 +666,15 @@ contract MondaV2Router02 is IMondaV2Router02 {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        amounts = MondaV2Library.getAmountsOut(factory, amountIn, path);
+        amounts = PurpsV2Library.getAmountsOut(factory, amountIn, path);
         require(
             amounts[amounts.length - 1] >= amountOutMin,
-            "MondaV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "PurpsV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
-            MondaV2Library.pairFor(factory, path[0], path[1]),
+            PurpsV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
         _swap(amounts, path, to);
@@ -691,15 +692,15 @@ contract MondaV2Router02 is IMondaV2Router02 {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        amounts = MondaV2Library.getAmountsIn(factory, amountOut, path);
+        amounts = PurpsV2Library.getAmountsIn(factory, amountOut, path);
         require(
             amounts[0] <= amountInMax,
-            "MondaV2Router: EXCESSIVE_INPUT_AMOUNT"
+            "PurpsV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
-            MondaV2Library.pairFor(factory, path[0], path[1]),
+            PurpsV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
         _swap(amounts, path, to);
@@ -717,16 +718,16 @@ contract MondaV2Router02 is IMondaV2Router02 {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[0] == WETH, "MondaV2Router: INVALID_PATH");
-        amounts = MondaV2Library.getAmountsOut(factory, msg.value, path);
+        require(path[0] == WETH, "PurpsV2Router: INVALID_PATH");
+        amounts = PurpsV2Library.getAmountsOut(factory, msg.value, path);
         require(
             amounts[amounts.length - 1] >= amountOutMin,
-            "MondaV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "PurpsV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
         IWETH(WETH).deposit{value: amounts[0]}();
         assert(
             IWETH(WETH).transfer(
-                MondaV2Library.pairFor(factory, path[0], path[1]),
+                PurpsV2Library.pairFor(factory, path[0], path[1]),
                 amounts[0]
             )
         );
@@ -745,16 +746,16 @@ contract MondaV2Router02 is IMondaV2Router02 {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[path.length - 1] == WETH, "MondaV2Router: INVALID_PATH");
-        amounts = MondaV2Library.getAmountsIn(factory, amountOut, path);
+        require(path[path.length - 1] == WETH, "PurpsV2Router: INVALID_PATH");
+        amounts = PurpsV2Library.getAmountsIn(factory, amountOut, path);
         require(
             amounts[0] <= amountInMax,
-            "MondaV2Router: EXCESSIVE_INPUT_AMOUNT"
+            "PurpsV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
-            MondaV2Library.pairFor(factory, path[0], path[1]),
+            PurpsV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
         _swap(amounts, path, address(this));
@@ -774,16 +775,16 @@ contract MondaV2Router02 is IMondaV2Router02 {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[path.length - 1] == WETH, "MondaV2Router: INVALID_PATH");
-        amounts = MondaV2Library.getAmountsOut(factory, amountIn, path);
+        require(path[path.length - 1] == WETH, "PurpsV2Router: INVALID_PATH");
+        amounts = PurpsV2Library.getAmountsOut(factory, amountIn, path);
         require(
             amounts[amounts.length - 1] >= amountOutMin,
-            "MondaV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "PurpsV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
-            MondaV2Library.pairFor(factory, path[0], path[1]),
+            PurpsV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
         _swap(amounts, path, address(this));
@@ -803,16 +804,16 @@ contract MondaV2Router02 is IMondaV2Router02 {
         ensure(deadline)
         returns (uint[] memory amounts)
     {
-        require(path[0] == WETH, "MondaV2Router: INVALID_PATH");
-        amounts = MondaV2Library.getAmountsIn(factory, amountOut, path);
+        require(path[0] == WETH, "PurpsV2Router: INVALID_PATH");
+        amounts = PurpsV2Library.getAmountsIn(factory, amountOut, path);
         require(
             amounts[0] <= msg.value,
-            "MondaV2Router: EXCESSIVE_INPUT_AMOUNT"
+            "PurpsV2Router: EXCESSIVE_INPUT_AMOUNT"
         );
         IWETH(WETH).deposit{value: amounts[0]}();
         assert(
             IWETH(WETH).transfer(
-                MondaV2Library.pairFor(factory, path[0], path[1]),
+                PurpsV2Library.pairFor(factory, path[0], path[1]),
                 amounts[0]
             )
         );
@@ -830,9 +831,9 @@ contract MondaV2Router02 is IMondaV2Router02 {
     ) internal virtual {
         for (uint i; i < path.length - 1; i++) {
             (address input, address output) = (path[i], path[i + 1]);
-            (address token0, ) = MondaV2Library.sortTokens(input, output);
-            IMondaV2Pair pair = IMondaV2Pair(
-                MondaV2Library.pairFor(factory, input, output)
+            (address token0, ) = PurpsV2Library.sortTokens(input, output);
+            IPurpsV2Pair pair = IPurpsV2Pair(
+                PurpsV2Library.pairFor(factory, input, output)
             );
             uint amountInput;
             uint amountOutput;
@@ -845,7 +846,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
                 amountInput = IERC20(input).balanceOf(address(pair)).sub(
                     reserveInput
                 );
-                amountOutput = MondaV2Library.getAmountOut(
+                amountOutput = PurpsV2Library.getAmountOut(
                     amountInput,
                     reserveInput,
                     reserveOutput
@@ -855,7 +856,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
                 ? (uint(0), amountOutput)
                 : (amountOutput, uint(0));
             address to = i < path.length - 2
-                ? MondaV2Library.pairFor(factory, output, path[i + 2])
+                ? PurpsV2Library.pairFor(factory, output, path[i + 2])
                 : _to;
             pair.swap(amount0Out, amount1Out, to, new bytes(0));
         }
@@ -870,7 +871,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
-            MondaV2Library.pairFor(factory, path[0], path[1]),
+            PurpsV2Library.pairFor(factory, path[0], path[1]),
             amountIn
         );
         uint balanceBefore = IERC20(path[path.length - 1]).balanceOf(to);
@@ -878,7 +879,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
         require(
             IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore) >=
                 amountOutMin,
-            "MondaV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "PurpsV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
     }
     function swapExactETHForTokensSupportingFeeOnTransferTokens(
@@ -887,12 +888,12 @@ contract MondaV2Router02 is IMondaV2Router02 {
         address to,
         uint deadline
     ) external payable virtual override ensure(deadline) {
-        require(path[0] == WETH, "MondaV2Router: INVALID_PATH");
+        require(path[0] == WETH, "PurpsV2Router: INVALID_PATH");
         uint amountIn = msg.value;
         IWETH(WETH).deposit{value: amountIn}();
         assert(
             IWETH(WETH).transfer(
-                MondaV2Library.pairFor(factory, path[0], path[1]),
+                PurpsV2Library.pairFor(factory, path[0], path[1]),
                 amountIn
             )
         );
@@ -901,7 +902,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
         require(
             IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore) >=
                 amountOutMin,
-            "MondaV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "PurpsV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
     }
     function swapExactTokensForETHSupportingFeeOnTransferTokens(
@@ -911,18 +912,18 @@ contract MondaV2Router02 is IMondaV2Router02 {
         address to,
         uint deadline
     ) external virtual override ensure(deadline) {
-        require(path[path.length - 1] == WETH, "MondaV2Router: INVALID_PATH");
+        require(path[path.length - 1] == WETH, "PurpsV2Router: INVALID_PATH");
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
-            MondaV2Library.pairFor(factory, path[0], path[1]),
+            PurpsV2Library.pairFor(factory, path[0], path[1]),
             amountIn
         );
         _swapSupportingFeeOnTransferTokens(path, address(this));
         uint amountOut = IERC20(WETH).balanceOf(address(this));
         require(
             amountOut >= amountOutMin,
-            "MondaV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "PurpsV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
         IWETH(WETH).withdraw(amountOut);
         TransferHelper.safeTransferETH(to, amountOut);
@@ -934,7 +935,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
         uint reserveA,
         uint reserveB
     ) public pure virtual override returns (uint amountB) {
-        return MondaV2Library.quote(amountA, reserveA, reserveB);
+        return PurpsV2Library.quote(amountA, reserveA, reserveB);
     }
 
     function getAmountOut(
@@ -942,7 +943,7 @@ contract MondaV2Router02 is IMondaV2Router02 {
         uint reserveIn,
         uint reserveOut
     ) public pure virtual override returns (uint amountOut) {
-        return MondaV2Library.getAmountOut(amountIn, reserveIn, reserveOut);
+        return PurpsV2Library.getAmountOut(amountIn, reserveIn, reserveOut);
     }
 
     function getAmountIn(
@@ -950,21 +951,21 @@ contract MondaV2Router02 is IMondaV2Router02 {
         uint reserveIn,
         uint reserveOut
     ) public pure virtual override returns (uint amountIn) {
-        return MondaV2Library.getAmountIn(amountOut, reserveIn, reserveOut);
+        return PurpsV2Library.getAmountIn(amountOut, reserveIn, reserveOut);
     }
 
     function getAmountsOut(
         uint amountIn,
         address[] memory path
     ) public view virtual override returns (uint[] memory amounts) {
-        return MondaV2Library.getAmountsOut(factory, amountIn, path);
+        return PurpsV2Library.getAmountsOut(factory, amountIn, path);
     }
 
     function getAmountsIn(
         uint amountOut,
         address[] memory path
     ) public view virtual override returns (uint[] memory amounts) {
-        return MondaV2Library.getAmountsIn(factory, amountOut, path);
+        return PurpsV2Library.getAmountsIn(factory, amountOut, path);
     }
 }
 
@@ -984,7 +985,7 @@ library SafeMath {
     }
 }
 
-library MondaV2Library {
+library PurpsV2Library {
     using SafeMath for uint;
 
     // returns sorted token addresses, used to handle return values from pairs sorted in this order
@@ -992,11 +993,11 @@ library MondaV2Library {
         address tokenA,
         address tokenB
     ) internal pure returns (address token0, address token1) {
-        require(tokenA != tokenB, "MondaV2Library: IDENTICAL_ADDRESSES");
+        require(tokenA != tokenB, "PurpsV2Library: IDENTICAL_ADDRESSES");
         (token0, token1) = tokenA < tokenB
             ? (tokenA, tokenB)
             : (tokenB, tokenA);
-        require(token0 != address(0), "MondaV2Library: ZERO_ADDRESS");
+        require(token0 != address(0), "PurpsV2Library: ZERO_ADDRESS");
     }
 
     // calculates the CREATE2 address for a pair without making any external calls
@@ -1013,7 +1014,7 @@ library MondaV2Library {
                         hex"ff",
                         factory,
                         keccak256(abi.encodePacked(token0, token1)),
-                        hex"0f1388bd2644a20d3a9dee41a1116ad41481c0cba06535ed1130521055b3a0f1" // init code hash
+                        hex"b5507933ab3ce5c0a20141a74704bea128d7e4302616ada616be885a02bd9b07" // init code hash
                     )
                 )
             )
@@ -1027,7 +1028,7 @@ library MondaV2Library {
         address tokenB
     ) internal view returns (uint reserveA, uint reserveB) {
         (address token0, ) = sortTokens(tokenA, tokenB);
-        (uint reserve0, uint reserve1, ) = IMondaV2Pair(
+        (uint reserve0, uint reserve1, ) = IPurpsV2Pair(
             pairFor(factory, tokenA, tokenB)
         ).getReserves();
         (reserveA, reserveB) = tokenA == token0
@@ -1041,10 +1042,10 @@ library MondaV2Library {
         uint reserveA,
         uint reserveB
     ) internal pure returns (uint amountB) {
-        require(amountA > 0, "MondaV2Library: INSUFFICIENT_AMOUNT");
+        require(amountA > 0, "PurpsV2Library: INSUFFICIENT_AMOUNT");
         require(
             reserveA > 0 && reserveB > 0,
-            "MondaV2Library: INSUFFICIENT_LIQUIDITY"
+            "PurpsV2Library: INSUFFICIENT_LIQUIDITY"
         );
         amountB = amountA.mul(reserveB) / reserveA;
     }
@@ -1055,10 +1056,10 @@ library MondaV2Library {
         uint reserveIn,
         uint reserveOut
     ) internal pure returns (uint amountOut) {
-        require(amountIn > 0, "MondaV2Library: INSUFFICIENT_INPUT_AMOUNT");
+        require(amountIn > 0, "PurpsV2Library: INSUFFICIENT_INPUT_AMOUNT");
         require(
             reserveIn > 0 && reserveOut > 0,
-            "MondaV2Library: INSUFFICIENT_LIQUIDITY"
+            "PurpsV2Library: INSUFFICIENT_LIQUIDITY"
         );
         uint amountInWithFee = amountIn.mul(997);
         uint numerator = amountInWithFee.mul(reserveOut);
@@ -1072,10 +1073,10 @@ library MondaV2Library {
         uint reserveIn,
         uint reserveOut
     ) internal pure returns (uint amountIn) {
-        require(amountOut > 0, "MondaV2Library: INSUFFICIENT_OUTPUT_AMOUNT");
+        require(amountOut > 0, "PurpsV2Library: INSUFFICIENT_OUTPUT_AMOUNT");
         require(
             reserveIn > 0 && reserveOut > 0,
-            "MondaV2Library: INSUFFICIENT_LIQUIDITY"
+            "PurpsV2Library: INSUFFICIENT_LIQUIDITY"
         );
         uint numerator = reserveIn.mul(amountOut).mul(1000);
         uint denominator = reserveOut.sub(amountOut).mul(997);
@@ -1088,7 +1089,7 @@ library MondaV2Library {
         uint amountIn,
         address[] memory path
     ) internal view returns (uint[] memory amounts) {
-        require(path.length >= 2, "MondaV2Library: INVALID_PATH");
+        require(path.length >= 2, "PurpsV2Library: INVALID_PATH");
         amounts = new uint[](path.length);
         amounts[0] = amountIn;
         for (uint i; i < path.length - 1; i++) {
@@ -1107,7 +1108,7 @@ library MondaV2Library {
         uint amountOut,
         address[] memory path
     ) internal view returns (uint[] memory amounts) {
-        require(path.length >= 2, "MondaV2Library: INVALID_PATH");
+        require(path.length >= 2, "PurpsV2Library: INVALID_PATH");
         amounts = new uint[](path.length);
         amounts[amounts.length - 1] = amountOut;
         for (uint i = path.length - 1; i > 0; i--) {

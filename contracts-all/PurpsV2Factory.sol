@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
-//    __  ___             __    
-//   /  |/  /__  ___  ___/ /__ _
-//  / /|_/ / _ \/ _ \/ _  / _ `/
-// /_/  /_/\___/_//_/\_,_/\_,_/                            
-//
+//      ____
+//     / __ \__  ___________  _____
+//    / /_/ / / / / ___/ __ \/ ___/
+//   / ____/ /_/ / /  / /_/ (__  )
+//  /_/    \__,_/_/  / .___/____/
+//                  /_/
 
 pragma solidity =0.5.17;
 
-interface IMondaV2Factory {
+interface IPurpsV2Factory {
     event PairCreated(
         address indexed token0,
         address indexed token1,
@@ -34,7 +35,7 @@ interface IMondaV2Factory {
     function setFeeToSetter(address) external;
 }
 
-interface IMondaV2Pair {
+interface IPurpsV2Pair {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
 
@@ -113,7 +114,7 @@ interface IMondaV2Pair {
     function initialize(address, address) external;
 }
 
-interface IMondaV2ERC20 {
+interface IPurpsV2ERC20 {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
 
@@ -173,8 +174,8 @@ interface IERC20 {
     ) external returns (bool);
 }
 
-interface IMondaV2Callee {
-    function MondaV2Call(
+interface IPurpsV2Callee {
+    function PurpsV2Call(
         address sender,
         uint amount0,
         uint amount1,
@@ -182,11 +183,11 @@ interface IMondaV2Callee {
     ) external;
 }
 
-contract MondaV2ERC20 is IMondaV2ERC20 {
+contract PurpsV2ERC20 is IPurpsV2ERC20 {
     using SafeMath for uint;
 
-    string public constant name = "Monda V2 LP";
-    string public constant symbol = "MONDA-V2";
+    string public constant name = "Purps LPs";
+    string public constant symbol = "PURPS-LP";
     uint8 public constant decimals = 18;
     uint public totalSupply;
     mapping(address => uint) public balanceOf;
@@ -275,7 +276,7 @@ contract MondaV2ERC20 is IMondaV2ERC20 {
         bytes32 r,
         bytes32 s
     ) external {
-        require(deadline >= block.timestamp, "MondaV2: EXPIRED");
+        require(deadline >= block.timestamp, "PurpsV2: EXPIRED");
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -295,13 +296,13 @@ contract MondaV2ERC20 is IMondaV2ERC20 {
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(
             recoveredAddress != address(0) && recoveredAddress == owner,
-            "MondaV2: INVALID_SIGNATURE"
+            "PurpsV2: INVALID_SIGNATURE"
         );
         _approve(owner, spender, value);
     }
 }
 
-contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
+contract PurpsV2Pair is IPurpsV2Pair, PurpsV2ERC20 {
     using SafeMath for uint;
     using UQ112x112 for uint224;
 
@@ -323,7 +324,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
 
     uint private unlocked = 1;
     modifier lock() {
-        require(unlocked == 1, "MondaV2: LOCKED");
+        require(unlocked == 1, "PurpsV2: LOCKED");
         unlocked = 0;
         _;
         unlocked = 1;
@@ -349,7 +350,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
         );
         require(
             success && (data.length == 0 || abi.decode(data, (bool))),
-            "MondaV2: TRANSFER_FAILED"
+            "PurpsV2: TRANSFER_FAILED"
         );
     }
 
@@ -376,7 +377,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
 
     // called once by the factory at time of deployment
     function initialize(address _token0, address _token1) external {
-        require(msg.sender == factory, "MondaV2: FORBIDDEN"); // sufficient check
+        require(msg.sender == factory, "PurpsV2: FORBIDDEN"); // sufficient check
         token0 = _token0;
         token1 = _token1;
     }
@@ -390,7 +391,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
     ) private {
         require(
             balance0 <= uint112(-1) && balance1 <= uint112(-1),
-            "MondaV2: OVERFLOW"
+            "PurpsV2: OVERFLOW"
         );
         uint32 blockTimestamp = uint32(block.timestamp % 2 ** 32);
         uint32 timeElapsed = blockTimestamp - blockTimestampLast; // overflow is desired
@@ -414,7 +415,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
         uint112 _reserve0,
         uint112 _reserve1
     ) private returns (bool feeOn) {
-        address feeTo = IMondaV2Factory(factory).feeTo();
+        address feeTo = IPurpsV2Factory(factory).feeTo();
         feeOn = feeTo != address(0);
         uint _kLast = kLast; // gas savings
         if (feeOn) {
@@ -452,7 +453,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
                 amount1.mul(_totalSupply) / _reserve1
             );
         }
-        require(liquidity > 0, "MondaV2: INSUFFICIENT_LIQUIDITY_MINTED");
+        require(liquidity > 0, "PurpsV2: INSUFFICIENT_LIQUIDITY_MINTED");
         _mint(to, liquidity);
 
         _update(balance0, balance1, _reserve0, _reserve1);
@@ -477,7 +478,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
         amount1 = liquidity.mul(balance1) / _totalSupply; // using balances ensures pro-rata distribution
         require(
             amount0 > 0 && amount1 > 0,
-            "MondaV2: INSUFFICIENT_LIQUIDITY_BURNED"
+            "PurpsV2: INSUFFICIENT_LIQUIDITY_BURNED"
         );
         _burn(address(this), liquidity);
         _safeTransfer(_token0, to, amount0);
@@ -499,12 +500,12 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
     ) external lock {
         require(
             amount0Out > 0 || amount1Out > 0,
-            "MondaV2: INSUFFICIENT_OUTPUT_AMOUNT"
+            "PurpsV2: INSUFFICIENT_OUTPUT_AMOUNT"
         );
         (uint112 _reserve0, uint112 _reserve1, ) = getReserves(); // gas savings
         require(
             amount0Out < _reserve0 && amount1Out < _reserve1,
-            "MondaV2: INSUFFICIENT_LIQUIDITY"
+            "PurpsV2: INSUFFICIENT_LIQUIDITY"
         );
 
         uint balance0;
@@ -513,11 +514,11 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
             // scope for _token{0,1}, avoids stack too deep errors
             address _token0 = token0;
             address _token1 = token1;
-            require(to != _token0 && to != _token1, "MondaV2: INVALID_TO");
+            require(to != _token0 && to != _token1, "PurpsV2: INVALID_TO");
             if (amount0Out > 0) _safeTransfer(_token0, to, amount0Out); // optimistically transfer tokens
             if (amount1Out > 0) _safeTransfer(_token1, to, amount1Out); // optimistically transfer tokens
             if (data.length > 0)
-                IMondaV2Callee(to).MondaV2Call(
+                IPurpsV2Callee(to).PurpsV2Call(
                     msg.sender,
                     amount0Out,
                     amount1Out,
@@ -534,7 +535,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
             : 0;
         require(
             amount0In > 0 || amount1In > 0,
-            "MondaV2: INSUFFICIENT_INPUT_AMOUNT"
+            "PurpsV2: INSUFFICIENT_INPUT_AMOUNT"
         );
         {
             // scope for reserve{0,1}Adjusted, avoids stack too deep errors
@@ -543,7 +544,7 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
             require(
                 balance0Adjusted.mul(balance1Adjusted) >=
                     uint(_reserve0).mul(_reserve1).mul(1000 ** 2),
-                "MondaV2: K"
+                "PurpsV2: K"
             );
         }
 
@@ -578,10 +579,11 @@ contract MondaV2Pair is IMondaV2Pair, MondaV2ERC20 {
     }
 }
 
-contract MondaV2Factory is IMondaV2Factory {
+contract PurpsV2Factory is IPurpsV2Factory {
     address public feeTo;
     address public feeToSetter;
-    bytes32 public constant INIT_CODE_PAIR_HASH = keccak256(abi.encodePacked(type(MondaV2Pair).creationCode));
+    bytes32 public constant INIT_CODE_PAIR_HASH =
+        keccak256(abi.encodePacked(type(PurpsV2Pair).creationCode));
 
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
@@ -605,18 +607,18 @@ contract MondaV2Factory is IMondaV2Factory {
         address tokenA,
         address tokenB
     ) external returns (address pair) {
-        require(tokenA != tokenB, "MondaV2: IDENTICAL_ADDRESSES");
+        require(tokenA != tokenB, "PurpsV2: IDENTICAL_ADDRESSES");
         (address token0, address token1) = tokenA < tokenB
             ? (tokenA, tokenB)
             : (tokenB, tokenA);
-        require(token0 != address(0), "MondaV2: ZERO_ADDRESS");
-        require(getPair[token0][token1] == address(0), "MondaV2: PAIR_EXISTS"); // single check is sufficient
-        bytes memory bytecode = type(MondaV2Pair).creationCode;
+        require(token0 != address(0), "PurpsV2: ZERO_ADDRESS");
+        require(getPair[token0][token1] == address(0), "PurpsV2: PAIR_EXISTS"); // single check is sufficient
+        bytes memory bytecode = type(PurpsV2Pair).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
         assembly {
             pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        IMondaV2Pair(pair).initialize(token0, token1);
+        IPurpsV2Pair(pair).initialize(token0, token1);
         getPair[token0][token1] = pair;
         getPair[token1][token0] = pair; // populate mapping in the reverse direction
         allPairs.push(pair);
@@ -624,12 +626,12 @@ contract MondaV2Factory is IMondaV2Factory {
     }
 
     function setFeeTo(address _feeTo) external {
-        require(msg.sender == feeToSetter, "MondaV2: FORBIDDEN");
+        require(msg.sender == feeToSetter, "PurpsV2: FORBIDDEN");
         feeTo = _feeTo;
     }
 
     function setFeeToSetter(address _feeToSetter) external {
-        require(msg.sender == feeToSetter, "MondaV2: FORBIDDEN");
+        require(msg.sender == feeToSetter, "PurpsV2: FORBIDDEN");
         feeToSetter = _feeToSetter;
     }
 }
