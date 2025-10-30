@@ -77,6 +77,67 @@ contract Presale {
      */
     event TokensClaimed(address indexed claimer, uint256 amount);
 
+    /**
+     * @notice Emits when presale parameters are updated.
+     * @param hardCap The new hard cap.
+     * @param minBuy The new minimum buy amount.
+     * @param maxBuy The new maximum buy amount.
+     * @param totalSaleAmount The new total sale amount.
+     * @param start The new start timestamp.
+     * @param end The new end timestamp.
+     * @param price The new price.
+     */
+    event ParamsUpdated(
+        uint256 hardCap,
+        uint256 minBuy,
+        uint256 maxBuy,
+        uint256 totalSaleAmount,
+        uint256 start,
+        uint256 end,
+        uint256 price
+    );
+
+    /**
+     * @notice Emits when the sale token address is updated.
+     * @param oldToken The previous token address.
+     * @param newToken The new token address.
+     */
+    event TokenAddressUpdated(address indexed oldToken, address indexed newToken);
+
+    /**
+     * @notice Emits when the price is updated.
+     * @param oldPrice The previous price.
+     * @param newPrice The new price.
+     */
+    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+
+    /**
+     * @notice Emits when claiming is enabled or disabled.
+     * @param isEnabled Whether claiming is enabled.
+     */
+    event ClaimingStatusUpdated(bool isEnabled);
+
+    /**
+     * @notice Emits when refund is enabled or disabled.
+     * @param isEnabled Whether refund is enabled.
+     */
+    event RefundStatusUpdated(bool isEnabled);
+
+    /**
+     * @notice Emits when ETH is withdrawn.
+     * @param recipient The address receiving the ETH.
+     * @param amount The amount of ETH withdrawn.
+     */
+    event ETHWithdrawn(address indexed recipient, uint256 amount);
+
+    /**
+     * @notice Emits when tokens are withdrawn.
+     * @param token The address of the token.
+     * @param recipient The address receiving the tokens.
+     * @param amount The amount of tokens withdrawn.
+     */
+    event TokensWithdrawn(address indexed token, address indexed recipient, uint256 amount);
+
     constructor() {
         owner = msg.sender;
     }
@@ -176,6 +237,16 @@ contract Presale {
         end = _end;
 
         price = totalSaleAmount / hardCap;
+
+        emit ParamsUpdated(
+            _hardCap,
+            _minBuy,
+            _maxBuy,
+            _totalSaleAmount,
+            _start,
+            _end,
+            price
+        );
     }
 
     function setTokenAddress(address newfTokenAddress) external onlyOwner {
@@ -183,31 +254,39 @@ contract Presale {
             newfTokenAddress != address(0),
             "New token address is the zero address"
         );
+        address oldToken = address(saleToken);
         saleToken = IERC20(newfTokenAddress);
+        emit TokenAddressUpdated(oldToken, newfTokenAddress);
     }
 
     function setPrice(uint256 _price) external onlyOwner {
         require(_price > 0, "Price must be greater than 0");
+        uint256 oldPrice = price;
         price = _price;
+        emit PriceUpdated(oldPrice, _price);
     }
 
     function setClaimingEnabled(bool _isClaimingEnabled) external onlyOwner {
         isClaimingEnabled = _isClaimingEnabled;
+        emit ClaimingStatusUpdated(_isClaimingEnabled);
     }
 
     function setRefundEnabled(bool _isRefundEnabled) external onlyOwner {
         isRefundEnabled = _isRefundEnabled;
+        emit RefundStatusUpdated(_isRefundEnabled);
     }
 
     function withdraw(uint256 _amount) external onlyOwner {
         uint256 amount = _amount == 0 ? address(this).balance : _amount;
         (bool success, ) = payable(owner).call{value: amount}("");
         require(success, "Transfer failed");
+        emit ETHWithdrawn(owner, amount);
     }
 
     // Useful to rescue stuck tokens
     function withdrawToken(address _token, uint256 _amount) external onlyOwner {
         IERC20(_token).transfer(owner, _amount);
+        emit TokensWithdrawn(_token, owner, _amount);
     }
 
     receive() external payable {}
