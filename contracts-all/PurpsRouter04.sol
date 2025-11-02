@@ -289,9 +289,7 @@ contract PurpsRouter04 {
         IERC20 inputToken = IERC20(path[0]);
         inputToken.transferFrom(msg.sender, address(this), amountInMax);
         inputToken.approve(address(SWAP_ROUTER), amountInMax);
-
-        // Support FOT tokens
-        uint actualTokensReceived = inputToken.balanceOf(address(this));
+        uint actualTokensReceived = inputToken.balanceOf(address(this)); // support FOT tokens
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapTokensForExactETH(
@@ -329,9 +327,7 @@ contract PurpsRouter04 {
         IERC20 inputToken = IERC20(path[0]);
         inputToken.transferFrom(msg.sender, address(this), amountInMax);
         inputToken.approve(address(SWAP_ROUTER), amountInMax);
-
-        // Support FOT tokens
-        uint actualTokensReceived = inputToken.balanceOf(address(this));
+        uint actualTokensReceived = inputToken.balanceOf(address(this)); // support FOT tokens
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapTokensForExactTokens(
