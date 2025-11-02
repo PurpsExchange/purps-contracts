@@ -133,6 +133,7 @@ contract PurpsRouter04 {
                 _referralFee = referralFee;
             }
 
+            // Accounting for referral fees kept in the contract
             uint referralFeeAmount = (feeAmount * _referralFee) / DENOMINATOR;
             if (!hasRewardToken[referrer][token]) {
                 rewardTokensOf[referrer].push(token);
