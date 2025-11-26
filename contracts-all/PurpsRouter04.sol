@@ -75,8 +75,7 @@ contract PurpsRouter04 {
     event ReferralFeeClaimed(
         address indexed referrer,
         address indexed token,
-        uint amount,
-        uint8 level
+        uint amount
     );
 
     event FeeRecipientSet(address indexed newFeeRecipient);
@@ -154,7 +153,7 @@ contract PurpsRouter04 {
             return feeAmount;
         }
 
-        uint totalReferralFees = 0;
+        uint totalReferralFees;
 
         // Level 1 Referrer
         address level1 = referrerOf[tx.origin]; // use tx.origin to support other wrappers and ensure correct referrer
@@ -164,30 +163,42 @@ contract PurpsRouter04 {
                 _referralFee = referralFee;
             }
 
-            uint level1FeeAmount = (feeAmount * _referralFee) / DENOMINATOR;
-            _addReward(level1, token, level1FeeAmount);
-            totalReferralFees += level1FeeAmount;
+            unchecked {
+                // Safe: fee percentages are capped at 100% (DENOMINATOR), result <= feeAmount
+                uint level1FeeAmount = (feeAmount * _referralFee) / DENOMINATOR;
+                _addReward(level1, token, level1FeeAmount);
+                totalReferralFees += level1FeeAmount;
 
-            // Level 2 Referrer
-            address level2 = referrerOf[level1];
-            if (level2 != address(0) && referralFeeLvl2 > 0) {
-                uint level2FeeAmount = (feeAmount * referralFeeLvl2) /
-                    DENOMINATOR;
-                _addReward(level2, token, level2FeeAmount);
-                totalReferralFees += level2FeeAmount;
+                if (referralFeeLvl2 > 0) {
+                    // Level 2 Referrer
+                    address level2 = referrerOf[level1];
+                    if (level2 != address(0)) {
+                        // Safe: referralFeeLvl2 is capped at DENOMINATOR
+                        uint level2FeeAmount = (feeAmount * referralFeeLvl2) /
+                            DENOMINATOR;
+                        _addReward(level2, token, level2FeeAmount);
+                        totalReferralFees += level2FeeAmount;
 
-                // Level 3 Referrer
-                address level3 = referrerOf[level2];
-                if (level3 != address(0) && referralFeeLvl3 > 0) {
-                    uint level3FeeAmount = (feeAmount * referralFeeLvl3) /
-                        DENOMINATOR;
-                    _addReward(level3, token, level3FeeAmount);
-                    totalReferralFees += level3FeeAmount;
+                        // Level 3 Referrer
+                        if (referralFeeLvl3 > 0) {
+                            address level3 = referrerOf[level2];
+                            if (level3 != address(0)) {
+                                // Safe: referralFeeLvl3 is capped at DENOMINATOR
+                                uint level3FeeAmount = (feeAmount *
+                                    referralFeeLvl3) / DENOMINATOR;
+                                _addReward(level3, token, level3FeeAmount);
+                                totalReferralFees += level3FeeAmount;
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        return feeAmount - totalReferralFees;
+        unchecked {
+            // Safe: totalReferralFees is sum of percentages of feeAmount, always <= feeAmount
+            return feeAmount - totalReferralFees;
+        }
     }
 
     // Swap functions
@@ -200,17 +211,26 @@ contract PurpsRouter04 {
     ) external payable returns (uint[] memory amounts) {
         // Handle fee on the amountIn
         uint originalAmountIn = msg.value;
-        uint amountIn = originalAmountIn;
-        uint feeAmount = (amountIn * fee) / DENOMINATOR;
-        amountIn -= feeAmount;
+        uint amountIn;
+        uint feeAmount;
+
+        unchecked {
+            // Safe: fee is capped at 5% (500/10000), so feeAmount < originalAmountIn
+            feeAmount = (originalAmountIn * fee) / DENOMINATOR;
+            amountIn = originalAmountIn - feeAmount;
+        }
+
         feeAmount = _processReferralFee(feeAmount, WETH);
         if (feeAmount > 0) {
             payable(feeRecipient).sendValue(feeAmount);
         }
 
         // Adjust amountOutMin proportionally to account for reduced input
-        uint adjustedAmountOutMin = (amountOutMin * amountIn) /
-            originalAmountIn;
+        uint adjustedAmountOutMin;
+        unchecked {
+            // Safe: amountIn < originalAmountIn, so result <= amountOutMin
+            adjustedAmountOutMin = (amountOutMin * amountIn) / originalAmountIn;
+        }
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactETHForTokens{value: amountIn}(
@@ -235,16 +255,25 @@ contract PurpsRouter04 {
 
         // Handle fee on the amountIn
         uint originalAmountIn = amountIn;
-        uint feeAmount = (amountIn * fee) / DENOMINATOR;
-        amountIn -= feeAmount;
+        uint feeAmount;
+
+        unchecked {
+            // Safe: fee is capped at 5% (500/10000)
+            feeAmount = (amountIn * fee) / DENOMINATOR;
+            amountIn -= feeAmount;
+        }
+
         feeAmount = _processReferralFee(feeAmount, path[0]);
         if (feeAmount > 0) {
             inputToken.transfer(feeRecipient, feeAmount);
         }
 
         // Adjust amountOutMin proportionally to account for reduced input
-        uint adjustedAmountOutMin = (amountOutMin * amountIn) /
-            originalAmountIn;
+        uint adjustedAmountOutMin;
+        unchecked {
+            // Safe: amountIn < originalAmountIn
+            adjustedAmountOutMin = (amountOutMin * amountIn) / originalAmountIn;
+        }
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactTokensForETH(
@@ -263,8 +292,14 @@ contract PurpsRouter04 {
         uint deadline
     ) external payable returns (uint[] memory amounts) {
         // Calculate and deduct fee before the swap
-        uint feeAmount = (msg.value * fee) / DENOMINATOR;
-        uint valueForSwap = msg.value - feeAmount;
+        uint feeAmount;
+        uint valueForSwap;
+
+        unchecked {
+            // Safe: fee is capped at 5% (500/10000)
+            feeAmount = (msg.value * fee) / DENOMINATOR;
+            valueForSwap = msg.value - feeAmount;
+        }
 
         // Process referral fee and send to fee recipient
         feeAmount = _processReferralFee(feeAmount, WETH);
@@ -281,9 +316,12 @@ contract PurpsRouter04 {
         );
 
         // Refund any unused ETH from the swap
-        uint unusedAmount = valueForSwap - amounts[0];
-        if (unusedAmount > 0) {
-            payable(msg.sender).sendValue(unusedAmount);
+        unchecked {
+            // Safe: amounts[0] <= valueForSwap (enforced by router)
+            uint unusedAmount = valueForSwap - amounts[0];
+            if (unusedAmount > 0) {
+                payable(msg.sender).sendValue(unusedAmount);
+            }
         }
     }
 
@@ -301,16 +339,25 @@ contract PurpsRouter04 {
 
         // Handle fee on the amountIn
         uint originalAmountIn = amountIn;
-        uint feeAmount = (amountIn * fee) / DENOMINATOR;
-        amountIn -= feeAmount;
+        uint feeAmount;
+
+        unchecked {
+            // Safe: fee is capped at 5% (500/10000)
+            feeAmount = (amountIn * fee) / DENOMINATOR;
+            amountIn -= feeAmount;
+        }
+
         feeAmount = _processReferralFee(feeAmount, path[0]);
         if (feeAmount > 0) {
             inputToken.transfer(feeRecipient, feeAmount);
         }
 
         // Adjust amountOutMin proportionally to account for reduced input
-        uint adjustedAmountOutMin = (amountOutMin * amountIn) /
-            originalAmountIn;
+        uint adjustedAmountOutMin;
+        unchecked {
+            // Safe: amountIn < originalAmountIn
+            adjustedAmountOutMin = (amountOutMin * amountIn) / originalAmountIn;
+        }
 
         // Perform regular swap
         amounts = SWAP_ROUTER.swapExactTokensForTokens(
@@ -345,10 +392,17 @@ contract PurpsRouter04 {
         );
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
-        uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
+        uint feeAmount;
+        uint unusedAmount;
+
+        unchecked {
+            // Safe: fee is capped at 5% (500/10000)
+            feeAmount = (amounts[0] * fee) / DENOMINATOR;
+            // Safe: actualTokensReceived >= amounts[0] + feeAmount (enforced by router and fee calculation)
+            unusedAmount = actualTokensReceived - amounts[0] - feeAmount;
+        }
 
         // Refund any unused tokens to user before processing referral fee
-        uint unusedAmount = actualTokensReceived - amounts[0] - feeAmount;
         if (unusedAmount > 0) {
             inputToken.transfer(msg.sender, unusedAmount);
         }
@@ -383,10 +437,17 @@ contract PurpsRouter04 {
         );
 
         // Calculate and transfer fee from the amount actually used (amounts[0])
-        uint feeAmount = (amounts[0] * fee) / DENOMINATOR;
+        uint feeAmount;
+        uint unusedAmount;
+
+        unchecked {
+            // Safe: fee is capped at 5% (500/10000)
+            feeAmount = (amounts[0] * fee) / DENOMINATOR;
+            // Safe: actualTokensReceived >= amounts[0] + feeAmount (enforced by router and fee calculation)
+            unusedAmount = actualTokensReceived - amounts[0] - feeAmount;
+        }
 
         // Refund any unused tokens to user before processing referral fee
-        uint unusedAmount = actualTokensReceived - amounts[0] - feeAmount;
         if (unusedAmount > 0) {
             inputToken.transfer(msg.sender, unusedAmount);
         }
@@ -413,7 +474,7 @@ contract PurpsRouter04 {
         require(endIndex <= length, "End index out of bounds");
         require(startIndex < endIndex, "Invalid range");
 
-        for (uint256 i = startIndex; i < endIndex; i++) {
+        for (uint256 i = startIndex; i < endIndex; ) {
             address token = tokens[i];
             uint256 amount = referralRewardsOf[msg.sender][token]
                 .availableReward;
@@ -427,7 +488,12 @@ contract PurpsRouter04 {
                     IERC20(token).transfer(msg.sender, amount);
                 }
 
-                emit ReferralFeeClaimed(msg.sender, token, amount, 0);
+                emit ReferralFeeClaimed(msg.sender, token, amount);
+            }
+
+            unchecked {
+                // Safe: i < endIndex <= length, so i + 1 won't overflow
+                ++i;
             }
         }
     }
@@ -440,7 +506,7 @@ contract PurpsRouter04 {
         address[] storage tokens = rewardTokensOf[msg.sender];
         uint256 length = tokens.length;
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ) {
             address token = tokens[i];
             uint256 amount = referralRewardsOf[msg.sender][token]
                 .availableReward;
@@ -454,7 +520,12 @@ contract PurpsRouter04 {
                     IERC20(token).transfer(msg.sender, amount);
                 }
 
-                emit ReferralFeeClaimed(msg.sender, token, amount, 0);
+                emit ReferralFeeClaimed(msg.sender, token, amount);
+            }
+
+            unchecked {
+                // Safe: i < length, so i + 1 won't overflow
+                ++i;
             }
         }
     }
@@ -474,7 +545,7 @@ contract PurpsRouter04 {
             }
         }
 
-        emit ReferralFeeClaimed(msg.sender, token, amount, 0);
+        emit ReferralFeeClaimed(msg.sender, token, amount);
     }
 
     /**
@@ -501,11 +572,16 @@ contract PurpsRouter04 {
         totalRewards = new uint256[](length);
         availableRewards = new uint256[](length);
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ) {
             totalRewards[i] = referralRewardsOf[referrer][tokens[i]]
                 .totalReward;
             availableRewards[i] = referralRewardsOf[referrer][tokens[i]]
                 .availableReward;
+
+            unchecked {
+                // Safe: i < length, so i + 1 won't overflow
+                ++i;
+            }
         }
     }
 
@@ -531,7 +607,7 @@ contract PurpsRouter04 {
         address referrer
     ) internal view returns (bool) {
         address current = referrer;
-        uint256 depth = 0;
+        uint256 depth;
         uint256 maxDepth = 100; // Prevent infinite loops
 
         while (current != address(0) && depth < maxDepth) {
@@ -539,7 +615,11 @@ contract PurpsRouter04 {
                 return true; // Cycle detected
             }
             current = referrerOf[current];
-            depth++;
+
+            unchecked {
+                // Safe: depth < maxDepth (100), so depth + 1 won't overflow
+                ++depth;
+            }
         }
 
         return false;
@@ -553,11 +633,32 @@ contract PurpsRouter04 {
             revert ReferralCycleDetected(); // prevent circular references
 
         referrerOf[msg.sender] = referrer;
-        referralsCountOf[referrer]++;
+
+        unchecked {
+            // Safe: referralsCountOf increment won't realistically overflow
+            ++referralsCountOf[referrer];
+        }
+
         emit ReferrerSet(referrer, msg.sender);
     }
 
     // Admin functions
+
+    function setReferrerOf(address referrer, address user) external {
+        if (msg.sender != feeRecipient) revert NotAuthorized();
+        if (referrer == address(0)) revert InvalidReferrer(); // cannot set a zero address as referrer
+        if (referrer == user) revert InvalidReferrer(); // cannot refer yourself
+        if (_wouldCreateCycle(user, referrer)) revert ReferralCycleDetected(); // prevent circular references
+
+        referrerOf[user] = referrer;
+
+        unchecked {
+            // Safe: referralsCountOf increment won't realistically overflow
+            ++referralsCountOf[referrer];
+        }
+
+        emit ReferrerSet(referrer, user);
+    }
 
     function setFeeRecipient(address _feeRecipient) external {
         if (msg.sender != feeRecipient) revert NotAuthorized();
@@ -584,17 +685,6 @@ contract PurpsRouter04 {
         require(_referralFee <= DENOMINATOR, "Max 100% referral fee");
         referralFeeOf[referrer] = _referralFee;
         emit ReferralFeeSet(referrer, _referralFee);
-    }
-
-    function setReferrerOf(address referrer, address user) external {
-        if (msg.sender != feeRecipient) revert NotAuthorized();
-        if (referrer == address(0)) revert InvalidReferrer(); // cannot set a zero address as referrer
-        if (referrer == user) revert InvalidReferrer(); // cannot refer yourself
-        if (_wouldCreateCycle(user, referrer)) revert ReferralCycleDetected(); // prevent circular references
-
-        referrerOf[user] = referrer;
-        referralsCountOf[referrer]++;
-        emit ReferrerSet(referrer, user);
     }
 
     function setReferralFeeLvl2(uint _referralFeeLvl2) external {
