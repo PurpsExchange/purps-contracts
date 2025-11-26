@@ -4,17 +4,20 @@ import { monadAccount } from "./keys";
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.6.6",
-    // version: "0.5.17",
+    // version: "0.6.6",
+    version: "0.5.17",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 999999,
+        runs: 99999,
       },
     },
   },
-  defaultNetwork: "monad-testnet",
+  defaultNetwork: "monad",
   networks: {
+    monad: {
+      url: "https://rpc-mainnet.monadinfra.com/rpc/FDra1kPP5XIAXHwXPRMqxKmlVPXA72mE",
+    },
     "monad-testnet": {
       url: "https://testnet-rpc.monad.xyz/",
       accounts: [monadAccount],

@@ -2,7 +2,7 @@
   "name": "hardhat-project",
   "scripts": {
     "deploy": "rm -rf ./ignition/deployments && hardhat ignition deploy ./ignition/modules/V2Periphery.ts",
-    "verify": "hardhat verify 0x4DA2eB9D45B677Aea588c39a29d8fF16576339a1"
+    "verify": "hardhat verify 0xb857E97D4cE4330D167d83dB33367a0503A6900b"
   },
   "dependencies": {
     "@uniswap/lib": "4.0.1-alpha",
