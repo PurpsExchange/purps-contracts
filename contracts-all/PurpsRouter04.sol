@@ -75,24 +75,29 @@ contract PurpsRouter04 {
     event ReferralFeeClaimed(
         address indexed referrer,
         address indexed token,
-        uint amount
+        uint amount,
+        uint8 level
     );
 
     event FeeRecipientSet(address indexed newFeeRecipient);
     event FeeSet(uint newFee);
     event ReferralFeeSet(address indexed referrer, uint newReferralFee);
+    event ReferralFeeLevelSet(uint8 level, uint newFee);
     event ReferrerSet(address indexed referrer, address indexed user);
 
     error NotAuthorized();
     error InvalidReferrer();
+    error ReferralCycleDetected();
 
     uint public constant DENOMINATOR = 10_000;
     address public constant WETH = 0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A;
 
     address public feeRecipient;
     uint public fee;
-    uint public referralFee; // bps of regular fee
-    mapping(address => uint) public referralFeeOf; // custom referral fees
+    uint public referralFee; // bps of regular fee (level 1)
+    uint public referralFeeLvl2; // bps of regular fee (level 2)
+    uint public referralFeeLvl3; // bps of regular fee (level 3)
+    mapping(address => uint) public referralFeeOf; // custom referral fees for level 1
 
     mapping(address => address) public referrerOf;
     mapping(address => uint) public referralsCountOf;
@@ -103,48 +108,86 @@ contract PurpsRouter04 {
     IRouter02 constant SWAP_ROUTER =
         IRouter02(0x22aDf91b491abc7a50895Cd5c5c194EcCC93f5E2);
 
-    constructor(uint _fee, uint _referralFee, address _feeRecipient) {
+    constructor(
+        uint _fee,
+        uint _referralFee,
+        uint _referralFeeLvl2,
+        uint _referralFeeLvl3,
+        address _feeRecipient
+    ) {
         fee = _fee;
         referralFee = _referralFee;
+        referralFeeLvl2 = _referralFeeLvl2;
+        referralFeeLvl3 = _referralFeeLvl3;
         feeRecipient = _feeRecipient;
     }
 
     // Internal utility functions
 
     /**
-     * @dev Processes referral fee and updates referrer rewards
+     * @dev Adds reward to a referrer's balance for a specific token
+     * @param referrer The referrer address to credit
+     * @param token The token address for the reward (use WETH for ETH)
+     * @param amount The amount to add
+     */
+    function _addReward(address referrer, address token, uint amount) internal {
+        if (!hasRewardToken[referrer][token]) {
+            rewardTokensOf[referrer].push(token);
+            hasRewardToken[referrer][token] = true;
+        }
+        referralRewardsOf[referrer][token].totalReward += amount;
+        referralRewardsOf[referrer][token].availableReward += amount;
+    }
+
+    /**
+     * @dev Processes referral fee and updates referrer rewards across 3 levels
      * @param feeAmount The total fee amount to process
      * @param token The token address for the reward (use WETH for ETH)
-     * @return remainingFee The fee amount after deducting referral portion
+     * @return remainingFee The fee amount after deducting referral portions
      */
     function _processReferralFee(
         uint feeAmount,
         address token
     ) internal returns (uint remainingFee) {
         if (referralFee == 0) {
-            // referral fee is disabled globally
+            // referral fee disabled globally
             return feeAmount;
         }
 
-        address referrer = referrerOf[tx.origin]; // use tx.origin to support other wrappers and ensure correct referrer
-        if (referrer != address(0)) {
-            uint _referralFee = referralFeeOf[referrer];
+        uint totalReferralFees = 0;
+
+        // Level 1 Referrer
+        address level1 = referrerOf[tx.origin]; // use tx.origin to support other wrappers and ensure correct referrer
+        if (level1 != address(0)) {
+            uint _referralFee = referralFeeOf[level1];
             if (_referralFee == 0) {
                 _referralFee = referralFee;
             }
 
-            // Accounting for referral fees kept in the contract
-            uint referralFeeAmount = (feeAmount * _referralFee) / DENOMINATOR;
-            if (!hasRewardToken[referrer][token]) {
-                rewardTokensOf[referrer].push(token);
-                hasRewardToken[referrer][token] = true;
+            uint level1FeeAmount = (feeAmount * _referralFee) / DENOMINATOR;
+            _addReward(level1, token, level1FeeAmount);
+            totalReferralFees += level1FeeAmount;
+
+            // Level 2 Referrer
+            address level2 = referrerOf[level1];
+            if (level2 != address(0) && referralFeeLvl2 > 0) {
+                uint level2FeeAmount = (feeAmount * referralFeeLvl2) /
+                    DENOMINATOR;
+                _addReward(level2, token, level2FeeAmount);
+                totalReferralFees += level2FeeAmount;
+
+                // Level 3 Referrer
+                address level3 = referrerOf[level2];
+                if (level3 != address(0) && referralFeeLvl3 > 0) {
+                    uint level3FeeAmount = (feeAmount * referralFeeLvl3) /
+                        DENOMINATOR;
+                    _addReward(level3, token, level3FeeAmount);
+                    totalReferralFees += level3FeeAmount;
+                }
             }
-            referralRewardsOf[referrer][token].totalReward += referralFeeAmount;
-            referralRewardsOf[referrer][token]
-                .availableReward += referralFeeAmount;
-            return feeAmount - referralFeeAmount;
         }
-        return feeAmount;
+
+        return feeAmount - totalReferralFees;
     }
 
     // Swap functions
@@ -384,7 +427,7 @@ contract PurpsRouter04 {
                     IERC20(token).transfer(msg.sender, amount);
                 }
 
-                emit ReferralFeeClaimed(msg.sender, token, amount);
+                emit ReferralFeeClaimed(msg.sender, token, amount, 0);
             }
         }
     }
@@ -411,7 +454,7 @@ contract PurpsRouter04 {
                     IERC20(token).transfer(msg.sender, amount);
                 }
 
-                emit ReferralFeeClaimed(msg.sender, token, amount);
+                emit ReferralFeeClaimed(msg.sender, token, amount, 0);
             }
         }
     }
@@ -431,7 +474,7 @@ contract PurpsRouter04 {
             }
         }
 
-        emit ReferralFeeClaimed(msg.sender, token, amount);
+        emit ReferralFeeClaimed(msg.sender, token, amount, 0);
     }
 
     /**
@@ -477,10 +520,38 @@ contract PurpsRouter04 {
         return rewardTokensOf[referrer].length;
     }
 
+    /**
+     * @dev Checks if setting a referrer would create a cycle in the referral chain
+     * @param user The user setting their referrer
+     * @param referrer The proposed referrer
+     * @return true if a cycle would be created
+     */
+    function _wouldCreateCycle(
+        address user,
+        address referrer
+    ) internal view returns (bool) {
+        address current = referrer;
+        uint256 depth = 0;
+        uint256 maxDepth = 100; // Prevent infinite loops
+
+        while (current != address(0) && depth < maxDepth) {
+            if (current == user) {
+                return true; // Cycle detected
+            }
+            current = referrerOf[current];
+            depth++;
+        }
+
+        return false;
+    }
+
     function setReferrer(address referrer) external {
         if (referrer == address(0)) revert InvalidReferrer(); // cannot set a zero address as referrer
         if (referrer == msg.sender) revert InvalidReferrer(); // cannot set yourself as referrer
         if (referrerOf[msg.sender] != address(0)) revert InvalidReferrer(); // user already has a referrer
+        if (_wouldCreateCycle(msg.sender, referrer))
+            revert ReferralCycleDetected(); // prevent circular references
+
         referrerOf[msg.sender] = referrer;
         referralsCountOf[referrer]++;
         emit ReferrerSet(referrer, msg.sender);
@@ -519,9 +590,25 @@ contract PurpsRouter04 {
         if (msg.sender != feeRecipient) revert NotAuthorized();
         if (referrer == address(0)) revert InvalidReferrer(); // cannot set a zero address as referrer
         if (referrer == user) revert InvalidReferrer(); // cannot refer yourself
+        if (_wouldCreateCycle(user, referrer)) revert ReferralCycleDetected(); // prevent circular references
+
         referrerOf[user] = referrer;
         referralsCountOf[referrer]++;
         emit ReferrerSet(referrer, user);
+    }
+
+    function setReferralFeeLvl2(uint _referralFeeLvl2) external {
+        if (msg.sender != feeRecipient) revert NotAuthorized();
+        require(_referralFeeLvl2 <= DENOMINATOR, "Max 100% referral fee");
+        referralFeeLvl2 = _referralFeeLvl2;
+        emit ReferralFeeLevelSet(2, _referralFeeLvl2);
+    }
+
+    function setReferralFeeLvl3(uint _referralFeeLvl3) external {
+        if (msg.sender != feeRecipient) revert NotAuthorized();
+        require(_referralFeeLvl3 <= DENOMINATOR, "Max 100% referral fee");
+        referralFeeLvl3 = _referralFeeLvl3;
+        emit ReferralFeeLevelSet(3, _referralFeeLvl3);
     }
 
     receive() external payable {}
